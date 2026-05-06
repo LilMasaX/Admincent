@@ -1,0 +1,19 @@
+import { auth } from "@/lib/auth/config";
+import { NextResponse } from "next/server";
+
+export default auth((req) => {
+  const isAuthed = !!req.auth;
+  const { pathname } = req.nextUrl;
+  const protectedRoot = ["/dashboard", "/templates", "/certificates"];
+  const needsAuth = protectedRoot.some((p) => pathname.startsWith(p));
+  if (needsAuth && !isAuthed) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth).*)"],
+};
