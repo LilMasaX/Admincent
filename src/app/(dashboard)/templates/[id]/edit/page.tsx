@@ -11,6 +11,7 @@ export default async function EditTemplatePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const userId = session.user.id;
 
   const { id } = await params;
   const sb = getSupabaseAdmin();
@@ -20,44 +21,47 @@ export default async function EditTemplatePage({
     .eq("id", id)
     .maybeSingle();
   if (tpl.error || !tpl.data) notFound();
-  if (tpl.data.owner_id !== session.user.id) notFound();
-  if (tpl.data.kind !== "pdf") {
+  const data = tpl.data;
+  if (data.owner_id !== userId) notFound();
+
+  if (data.kind !== "pdf") {
     return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold">{tpl.data.name}</h1>
-        <p className="mt-3 text-sm text-neutral-600">
-          DOCX templates use <code>{"{{placeholder}}"}</code> tags inside the document — no visual
-          editor needed.
+      <div className="space-y-3">
+        <h1 className="text-3xl font-semibold tracking-tight">{data.name}</h1>
+        <p className="text-sm text-[var(--color-muted)]">
+          Las plantillas DOCX usan etiquetas{" "}
+          <code className="rounded bg-[var(--color-surface-2)] px-1">{"{{clave}}"}</code> dentro
+          del documento. No requieren editor visual.
         </p>
-      </main>
+      </div>
     );
   }
 
   const signed = await sb.storage
     .from("templates")
-    .createSignedUrl(tpl.data.storage_path, 60 * 30);
+    .createSignedUrl(data.storage_path, 60 * 30);
   if (signed.error || !signed.data) {
-    return <main className="p-8">Failed to load template file.</main>;
+    return <p className="text-sm text-red-400">No se pudo cargar el archivo de la plantilla.</p>;
   }
 
   const pageSizes =
-    (tpl.data.page_sizes as Array<{ width: number; height: number }> | null) ?? [];
+    (data.page_sizes as Array<{ width: number; height: number }> | null) ?? [];
 
   return (
-    <main className="mx-auto max-w-6xl p-6 space-y-4">
+    <div className="space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold">{tpl.data.name}</h1>
-        <p className="text-sm text-neutral-600">
-          Click on the PDF to place each field. Save when done. Coordinates are PDF points
-          (origin bottom-left).
+        <h1 className="text-3xl font-semibold tracking-tight">{data.name}</h1>
+        <p className="text-sm text-[var(--color-muted)]">
+          Haz clic sobre el PDF para colocar cada campo. Coordenadas en puntos PDF (origen
+          inferior-izquierdo).
         </p>
       </header>
       <TemplateEditor
-        templateId={tpl.data.id}
+        templateId={data.id}
         pdfUrl={signed.data.signedUrl}
-        initialFields={(tpl.data.fields ?? []) as PdfFieldDefStored[]}
+        initialFields={(data.fields ?? []) as PdfFieldDefStored[]}
         pageSizes={pageSizes}
       />
-    </main>
+    </div>
   );
 }

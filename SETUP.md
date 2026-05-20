@@ -1,32 +1,35 @@
-# Próximos pasos (manuales)
+# Nominapp — pasos manuales de setup
 
-Lista accionable de lo que tenés que hacer vos para que el proyecto arranque y termine en Vercel. Va en orden — no saltes pasos.
+Lista accionable para arrancar Nominapp local y desplegar en Vercel.
 
 ---
 
-## 1. Supabase: crear proyecto y schema
+## 1. Supabase: proyecto, schema y buckets
 
-1. Entrá a https://supabase.com → **New project**.
-   - Anotá la **DB password** (la vas a necesitar si después usás la CLI).
-   - Elegí región cercana a Vercel (ej. `us-east-1` o `sa-east-1`).
-2. Esperá ~2 min a que termine el provisioning.
-3. **Project Settings → API** → copiá:
+1. https://supabase.com → **New project**. Anotá la **DB password**.
+2. **Project Settings → API** → copiá:
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (esta **nunca** va al cliente)
-4. **SQL Editor → New query** → pegá y corré, en orden:
+   - `anon public` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` → `SUPABASE_SERVICE_ROLE_KEY` (nunca al cliente)
+3. **SQL Editor → New query** → ejecutá en orden:
    - `supabase/migrations/0001_init.sql`
    - `supabase/migrations/0002_pdf_overlay.sql`
+   - `supabase/migrations/0003_nominapp.sql`
 
-   Verificá en **Table editor** que existan: `app_users`, `templates`, `certificates`.
+   Verificá en **Table editor**: `app_users`, `templates`, `certificates`, `trabajadores`, `instructores`, `proveedores`, `devengados`, `deducciones`, `historial`, `nomina_counters`.
 
-## 2. Supabase Storage: crear los buckets
+4. **Storage → New bucket** (privados):
+   - `templates`
+   - `certificates`
+   - `desprendibles`
 
-1. **Storage → New bucket** → nombre `templates`.
-   - **Public bucket: OFF** (debe quedar privado).
-2. Repetir → bucket `certificates`, también privado.
+> RLS off: todo el acceso pasa por el service-role del server.
 
-> No hace falta configurar políticas RLS de Storage por ahora: todo el acceso pasa por el service-role key del servidor.
+## 2. Resend (correo)
+
+1. https://resend.com → crear cuenta.
+2. **API keys** → generar una → `RESEND_API_KEY`.
+3. **Domains** → agregar y verificar el dominio que usarás en `RESEND_FROM` (ej. `desprendibles@centicsas.com.co`).
 
 ## 3. Variables de entorno locales
 
@@ -34,82 +37,56 @@ Lista accionable de lo que tenés que hacer vos para que el proyecto arranque y 
 cp .env.example .env.local
 ```
 
-Editá `.env.local` y completá:
+Completá:
 
 | Var | Valor |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL del paso 1.3 |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public del paso 1.3 |
-| `SUPABASE_SERVICE_ROLE_KEY` | service_role del paso 1.3 |
-| `AUTH_SECRET` | corré `openssl rand -base64 32` y pegá la salida |
+|-----|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL del paso 1.2 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `RESEND_API_KEY` | Paso 2.2 |
+| `RESEND_FROM` | Email remitente verificado |
 
 ## 4. Probar local
 
 ```bash
+npm install
 npm run dev
 ```
 
-Abrí http://localhost:3000 y verificá:
+Abrí http://localhost:3000:
 
-- [ ] `/register` → crear una cuenta de prueba.
-- [ ] `/login` → iniciar sesión, redirige a `/dashboard`.
-- [ ] `/templates` → subir un PDF cualquiera (sin AcroForm está bien).
-- [ ] `/templates/<id>/edit` → clickear sobre el PDF para colocar campos (`nombre`, `curso`, `fecha`), **Save fields**.
-- [ ] Generar un certificado:
-  ```bash
-  curl -X POST http://localhost:3000/api/certificates/generate \
-    -H 'content-type: application/json' \
-    -b 'authjs.session-token=...' \
-    -d '{"templateId":"<UUID>","values":{"nombre":"Juan Perez","curso":"Excel","fecha":"2026-05-06"}}'
-  ```
-  (más fácil: armar la página `/certificates` con un form — está stub a propósito).
-- [ ] En Supabase → Storage → `certificates/` debería aparecer el archivo nuevo.
+- [ ] `/register` → crear cuenta.
+- [ ] `/login` → entra y redirige a `/dashboard`.
+- [ ] `/colaboradores/empleados` → agregar un empleado de prueba con email válido.
+- [ ] `/desprendibles` → seleccionar tipo + persona + fechas, agregar un devengado, **Generar PDF** descarga el archivo.
+- [ ] `/desprendibles` → **Enviar por correo** envía a la persona seleccionada (revisá Resend logs).
+- [ ] `/historial` → aparecen los registros con estado `Generado` o `Enviado`.
+- [ ] (opcional) `/templates` → subir PDF/DOCX y editar campos.
 
 ## 5. Repositorio remoto
 
-Si todavía no hay remote:
-
-```bash
-gh repo create admincentic --private --source=. --remote=origin --push
-```
-
-O manual:
-
 ```bash
 git add -A
-git commit -m "feat: initial scaffold (Next 16 + NextAuth + Supabase + cert overlay)"
-gh repo create admincentic --private
-git remote add origin git@github.com:<tu-usuario>/admincentic.git
-git push -u origin main
+git commit -m "feat: merge nominapp + admincentic into supabase/vercel web app"
+gh repo create nominapp --private --source=. --remote=origin --push
 ```
 
 ## 6. Deploy a Vercel
 
-1. https://vercel.com/new → **Import Git Repository** → elegí el repo.
-2. Framework: **Next.js** (auto-detect). Build & install: dejar default.
-3. **Environment Variables** → agregar las 4 del paso 3 (sin `_local`):
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `AUTH_SECRET`
-4. **Deploy**.
-5. Una vez deployado, abrí `https://<tu-app>.vercel.app/register` y repetí el smoke test del paso 4.
+1. https://vercel.com/new → **Import Git Repository**.
+2. Framework: Next.js (auto). Build/install default.
+3. **Environment Variables** → agregar las 6 del paso 3.
+4. Deploy.
+5. Smoke test en `https://<tu-app>.vercel.app`.
 
-> No agregues `export const runtime = "edge"` a las rutas de cert. `pdf-lib` y `docxtemplater` necesitan Node runtime.
+> **No** agregar `export const runtime = "edge"` en rutas de nómina/cert. `pdf-lib`, `docxtemplater` y `resend` requieren Node runtime.
 
-## 7. Lo que falta construir (decisión tuya, en orden de impacto)
+## 7. Cosas a tener en cuenta
 
-- [ ] **Página `/certificates` real**: listar templates del usuario, elegir uno, renderizar un input por cada `key` de `template.fields`, POST a `/api/certificates/generate`, mostrar link de descarga.
-- [ ] **Listado de templates** en `/templates`: hoy solo tiene el form de upload. Agregar tabla con link a `…/edit` y botón "Usar para generar".
-- [ ] **Descarga de certificado emitido**: ruta `GET /api/certificates/[id]/download` que devuelva un signed URL del bucket `certificates`.
-- [ ] **Drag-to-move** en el editor: hoy es solo click-to-add + remove. Útil para ajustar fino.
-- [ ] **Bulk**: subir CSV → emitir N certificados de un solo template.
-- [ ] **Validación de keys**: cuando se generan, avisar si en `values` falta algún `key` definido en `template.fields`.
-
-## 8. Riesgos / cosas a tener en cuenta
-
-- **service_role key**: si alguna vez la pegás en código del cliente, exponés la base entera. Vive solo en `lib/supabase/admin.ts`, importado solo desde route handlers o server components.
-- **PDFs grandes**: el render en `react-pdf` carga el archivo en el browser. PDFs >10 MB pueden lagear. Si pasa, agregar paginado lazy o hacer thumbnail server-side.
-- **Fuentes**: el overlay usa Helvetica estándar. Si necesitás tildes/ñ con tipografía custom, embebé un TTF en `fillPdfByPlacements` (extender `PdfFieldDef` con `fontUrl`).
-- **Backups**: Supabase free tier hace backup diario solo los últimos 7 días. Si el negocio depende de los certificados, contratá un plan con PITR o exportá a S3 periódicamente.
-- **Auth simple**: NextAuth Credentials no manda emails de verificación ni resetea passwords. Si lo necesitás, considerá migrar a Supabase Auth (sección "Switch to Supabase Auth" en `CLAUDE.md`).
+- **service_role key**: solo en `lib/supabase/admin.ts`, nunca en código `'use client'`.
+- **PDF**: el desprendible se genera en runtime Node (`buildDesprendiblePdf`). En Vercel free serverless, una invocación dura <2s para casos típicos. Si crecen los devengados/deducciones a >20 filas, revisar la altura del PDF.
+- **Resend free tier**: 3.000 emails/mes, 1 dominio. Para producción seria, pasar a plan pagado.
+- **Backups Supabase free**: solo 7 días. Si el historial es crítico, exportar periódicamente.
+- **Auth Credentials**: no manda verificación ni reset. Para producción, considerar migrar a Supabase Auth.

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { Trash2 } from "lucide-react";
 import type { PdfFieldDefStored } from "@/lib/cert";
 
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 type Props = {
   templateId: string;
@@ -14,6 +15,9 @@ type Props = {
 };
 
 const RENDER_WIDTH = 700;
+
+const inputCls =
+  "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none";
 
 export function TemplateEditor({ templateId, pdfUrl, initialFields, pageSizes }: Props) {
   const [pageIndex, setPageIndex] = useState(0);
@@ -60,19 +64,19 @@ export function TemplateEditor({ templateId, pdfUrl, initialFields, pageSizes }:
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <div>
-        <div className="mb-2 flex items-center gap-2 text-sm">
+        <div className="mb-3 flex items-center gap-2 text-sm">
           <button
-            className="rounded border px-2 py-1 disabled:opacity-50"
+            className="rounded-lg border border-[var(--color-border)] px-2 py-1 disabled:opacity-50"
             onClick={() => setPageIndex((i) => Math.max(0, i - 1))}
             disabled={pageIndex === 0}
           >
             ←
           </button>
-          <span>
-            Page {pageIndex + 1} / {pageSizes.length}
+          <span className="text-[var(--color-muted)]">
+            Página {pageIndex + 1} / {pageSizes.length}
           </span>
           <button
-            className="rounded border px-2 py-1 disabled:opacity-50"
+            className="rounded-lg border border-[var(--color-border)] px-2 py-1 disabled:opacity-50"
             onClick={() => setPageIndex((i) => Math.min(pageSizes.length - 1, i + 1))}
             disabled={pageIndex >= pageSizes.length - 1}
           >
@@ -82,10 +86,10 @@ export function TemplateEditor({ templateId, pdfUrl, initialFields, pageSizes }:
         <div
           ref={containerRef}
           onClick={onClick}
-          className="relative inline-block cursor-crosshair border bg-white shadow"
+          className="relative inline-block cursor-crosshair overflow-hidden rounded-lg border border-[var(--color-border)] bg-white shadow-xl"
           style={{ width: RENDER_WIDTH, height: renderHeight }}
         >
-          <Document file={pdfUrl} loading={<p className="p-4">Loading PDF…</p>}>
+          <Document file={pdfUrl} loading={<p className="p-4 text-neutral-700">Cargando…</p>}>
             <Page
               pageNumber={pageIndex + 1}
               width={RENDER_WIDTH}
@@ -101,7 +105,7 @@ export function TemplateEditor({ templateId, pdfUrl, initialFields, pageSizes }:
               return (
                 <div
                   key={i}
-                  className="pointer-events-none absolute -translate-y-full rounded bg-blue-500/80 px-1 text-xs text-white"
+                  className="pointer-events-none absolute -translate-y-full rounded bg-[var(--color-accent)]/85 px-1.5 py-0.5 text-xs font-medium text-white shadow"
                   style={{ left: cssX, top: cssY }}
                 >
                   {f.key}
@@ -112,50 +116,57 @@ export function TemplateEditor({ templateId, pdfUrl, initialFields, pageSizes }:
       </div>
 
       <aside className="space-y-4">
-        <div className="rounded-2xl border p-4 space-y-3">
-          <h2 className="font-semibold">New field on click</h2>
+        <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <h2 className="font-semibold">Nuevo campo</h2>
           <label className="block text-sm">
-            Key
+            <span className="mb-1 block text-xs text-[var(--color-muted)]">Clave</span>
             <input
               value={draftKey}
               onChange={(e) => setDraftKey(e.target.value)}
-              className="mt-1 w-full rounded border px-2 py-1"
+              className={inputCls}
             />
           </label>
           <label className="block text-sm">
-            Size (pt)
+            <span className="mb-1 block text-xs text-[var(--color-muted)]">Tamaño (pt)</span>
             <input
               type="number"
               value={draftSize}
               onChange={(e) => setDraftSize(Number(e.target.value))}
-              className="mt-1 w-full rounded border px-2 py-1"
+              className={inputCls}
             />
           </label>
           <label className="block text-sm">
-            Align
+            <span className="mb-1 block text-xs text-[var(--color-muted)]">Alineación</span>
             <select
               value={draftAlign}
               onChange={(e) => setDraftAlign(e.target.value as typeof draftAlign)}
-              className="mt-1 w-full rounded border px-2 py-1"
+              className={inputCls}
             >
-              <option value="left">left</option>
-              <option value="center">center</option>
-              <option value="right">right</option>
+              <option value="left">Izquierda</option>
+              <option value="center">Centro</option>
+              <option value="right">Derecha</option>
             </select>
           </label>
-          <p className="text-xs text-neutral-500">Click on the PDF to drop a placement.</p>
+          <p className="text-xs text-[var(--color-muted)]">Haz clic sobre el PDF para colocar.</p>
         </div>
 
-        <div className="rounded-2xl border p-4 space-y-2">
-          <h2 className="font-semibold">Fields ({fields.length})</h2>
-          <ul className="space-y-1 text-sm max-h-72 overflow-auto">
+        <div className="space-y-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <h2 className="font-semibold">Campos ({fields.length})</h2>
+          <ul className="max-h-72 space-y-1 overflow-auto text-sm">
             {fields.map((f, i) => (
-              <li key={i} className="flex items-center justify-between gap-2 border-b pb-1">
-                <span className="font-mono">
+              <li
+                key={i}
+                className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] pb-1 last:border-b-0"
+              >
+                <span className="truncate font-mono text-xs">
                   {f.key} · p{f.page ?? 0} · ({f.x.toFixed(0)}, {f.y.toFixed(0)})
                 </span>
-                <button onClick={() => removeField(i)} className="text-red-600 text-xs">
-                  remove
+                <button
+                  onClick={() => removeField(i)}
+                  className="rounded-md p-1 text-red-400 hover:bg-red-950/40"
+                  aria-label="Quitar"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </li>
             ))}
@@ -165,11 +176,11 @@ export function TemplateEditor({ templateId, pdfUrl, initialFields, pageSizes }:
         <button
           onClick={save}
           disabled={saving}
-          className="w-full rounded-md bg-black px-3 py-2 text-white disabled:opacity-50"
+          className="w-full rounded-xl bg-[var(--color-accent)] px-3 py-2.5 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
         >
-          {saving ? "Saving…" : "Save fields"}
+          {saving ? "Guardando…" : "Guardar campos"}
         </button>
-        {savedAt && <p className="text-xs text-green-700">Saved {savedAt}</p>}
+        {savedAt && <p className="text-xs text-emerald-400">Guardado a las {savedAt}</p>}
       </aside>
     </div>
   );

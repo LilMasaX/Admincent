@@ -1,21 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "admincentic",
-  description: "Automate certificate creation from PDF/DOCX templates.",
+  title: "Nominapp",
+  description:
+    "Genera y envía desprendibles de nómina, gestiona colaboradores y plantillas.",
+  icons: { icon: "/logo.webp" },
 };
 
 export default function RootLayout({
@@ -24,11 +15,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
+    <html lang="es" className="h-full antialiased">
+      <body className="min-h-full bg-[var(--color-background)] text-[var(--color-foreground)]">
         <Providers>{children}</Providers>
       </body>
     </html>

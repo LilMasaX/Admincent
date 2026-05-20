@@ -2,12 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth/config";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import {
-  fillDocx,
-  fillPdfByPlacements,
-  fillPdfForm,
-  type PdfFieldDef,
-} from "@/lib/cert";
 
 const bodySchema = z.object({
   templateId: z.string().uuid(),
@@ -28,7 +22,7 @@ export async function POST(req: Request) {
   const sb = getSupabaseAdmin();
   const tpl = await sb
     .from("templates")
-    .select("id, kind, storage_path, owner_id, fields, has_acroform")
+    .select("id, owner_id")
     .eq("id", templateId)
     .maybeSingle();
   if (tpl.error || !tpl.data) return NextResponse.json({ error: "template not found" }, { status: 404 });
@@ -36,49 +30,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const dl = await sb.storage.from("templates").download(tpl.data.storage_path);
-  if (dl.error || !dl.data) return NextResponse.json({ error: "download failed" }, { status: 500 });
-  const templateBytes = new Uint8Array(await dl.data.arrayBuffer());
-
-  let outBytes: Uint8Array;
-  let mime: string;
-  let ext: string;
-  if (tpl.data.kind === "pdf") {
-    const stringValues: Record<string, string> = {};
-    for (const [k, v] of Object.entries(values)) stringValues[k] = String(v);
-
-    const fields = (tpl.data.fields ?? []) as PdfFieldDef[];
-    if (fields.length > 0) {
-      outBytes = await fillPdfByPlacements(templateBytes, fields, stringValues);
-    } else if (tpl.data.has_acroform) {
-      outBytes = await fillPdfForm(templateBytes, stringValues);
-    } else {
-      return NextResponse.json(
-        { error: "PDF template has no field placements. PATCH /api/templates with fields[]." },
-        { status: 400 },
-      );
-    }
-    mime = "application/pdf";
-    ext = "pdf";
-  } else {
-    outBytes = fillDocx(templateBytes, values);
-    mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    ext = "docx";
-  }
-
-  const outPath = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
-  const up = await sb.storage.from("certificates").upload(outPath, outBytes, {
-    contentType: mime,
-    upsert: false,
-  });
-  if (up.error) return NextResponse.json({ error: up.error.message }, { status: 500 });
-
+  // No storage upload — certificate is regenerated on-demand from values.
   const ins = await sb
     .from("certificates")
     .insert({
       owner_id: session.user.id,
       template_id: templateId,
-      storage_path: outPath,
+      storage_path: null,
       values,
     })
     .select()

@@ -1,11 +1,20 @@
 import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
 
+const PROTECTED = [
+  "/dashboard",
+  "/desprendibles",
+  "/colaboradores",
+  "/historial",
+  "/templates",
+  "/certificates",
+  "/asistencia",
+];
+
 export default auth((req) => {
   const isAuthed = !!req.auth;
   const { pathname } = req.nextUrl;
-  const protectedRoot = ["/dashboard", "/templates", "/certificates"];
-  const needsAuth = protectedRoot.some((p) => pathname.startsWith(p));
+  const needsAuth = PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (needsAuth && !isAuthed) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";

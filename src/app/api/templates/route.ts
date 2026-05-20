@@ -2,20 +2,45 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth/config";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { detectKind, getPdfPageSizes, pdfHasAcroForm } from "@/lib/cert";
+import { detectKind, extractDocxKeys, getPdfPageSizes, pdfHasAcroForm } from "@/lib/cert";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  const { searchParams } = new URL(req.url);
+  const tipo = searchParams.get("tipo");
+
   const sb = getSupabaseAdmin();
-  const { data, error } = await sb
+  let query = sb
     .from("templates")
-    .select("id, name, kind, storage_path, fields, page_sizes, has_acroform, created_at")
+    .select("id, name, kind, storage_path, fields, page_sizes, has_acroform, created_at, tipo")
     .eq("owner_id", session.user.id)
     .order("created_at", { ascending: false });
+  if (tipo) query = query.eq("tipo", tipo);
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ templates: data });
+
+  // Lazy-migrate: DOCX templates with no detected fields → extract now and persist.
+  const templates = await Promise.all(
+    (data ?? []).map(async (tpl) => {
+      if (tpl.kind !== "docx" || (Array.isArray(tpl.fields) && tpl.fields.length > 0)) {
+        return tpl;
+      }
+      const dl = await sb.storage.from("templates").download(tpl.storage_path);
+      if (dl.error || !dl.data) return tpl;
+      const bytes = new Uint8Array(await dl.data.arrayBuffer());
+      const fields = extractDocxKeys(bytes).map((key) => ({ key }));
+      if (fields.length > 0) {
+        await sb.from("templates").update({ fields }).eq("id", tpl.id);
+        return { ...tpl, fields };
+      }
+      return tpl;
+    }),
+  );
+
+  return NextResponse.json({ templates });
 }
 
 export async function POST(req: Request) {
@@ -42,9 +67,12 @@ export async function POST(req: Request) {
 
   let pageSizes: Array<{ width: number; height: number }> | null = null;
   let hasAcro = false;
+  let fields: { key: string }[] = [];
   if (kind === "pdf") {
     pageSizes = await getPdfPageSizes(bytes);
     hasAcro = await pdfHasAcroForm(bytes);
+  } else if (kind === "docx") {
+    fields = extractDocxKeys(bytes).map((key) => ({ key }));
   }
 
   const ins = await sb
@@ -54,7 +82,7 @@ export async function POST(req: Request) {
       name,
       kind,
       storage_path: path,
-      fields: [],
+      fields,
       page_sizes: pageSizes,
       has_acroform: hasAcro,
     })

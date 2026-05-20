@@ -1,153 +1,161 @@
-# admincentic — Claude project guide
+# Nominapp — Claude project guide
 
-Web app to **automate certificate creation** from base PDF/DOCX templates the user uploads. User fills variable values; backend renders a personalized certificate file and stores it.
+Aplicación web para **gestión de nómina** y **generación de certificados/desprendibles** en Centic SAS.
+
+Combina dos productos previos (la app Electron `Nominapp` y el scaffold web `admincentic`) en un **único Next.js + Supabase desplegable en Vercel**. Electron quedó descartado: todo corre en web.
 
 ## Stack
 
 - **Next.js 16 (App Router) + React 19 + TypeScript** — `src/` layout, alias `@/*`.
-- **Tailwind v4** — `src/app/globals.css`, `@tailwindcss/postcss`.
+- **Tailwind v4** — `src/app/globals.css`, tema oscuro con acento `#f44336`.
 - **NextAuth (Auth.js) v5 beta** — Credentials provider, JWT sessions.
-- **Supabase** — Postgres + Storage. Server-side calls use service-role key.
-- **pdf-lib** — PDF form fill + text overlay.
-- **docxtemplater + pizzip** — DOCX `{{placeholder}}` rendering.
-- **bcryptjs** — password hashing.
-- **zod** — input validation.
-- **Deploy**: Vercel.
+- **Supabase** — Postgres + Storage. Server-side calls usan service-role key.
+- **pdf-lib** — Genera el PDF del desprendible y rellena plantillas (overlay/AcroForm).
+- **docxtemplater + pizzip** — Render de plantillas DOCX `{{placeholder}}`.
+- **Resend** — Envío de correos con adjuntos.
+- **bcryptjs**, **zod** — Hash de password y validación.
+- **react-hot-toast**, **lucide-react**, **react-number-format** — UI.
+- **Deploy**: Vercel (todas las rutas en runtime Node — no Edge).
+
+## Modelo de datos (single workspace)
+
+Todos los usuarios autenticados comparten la misma base de nómina (no hay `owner_id` en las tablas de nómina). `templates`/`certificates` sí están scopeadas por usuario.
+
+Tablas (ver `supabase/migrations/`):
+
+- `app_users` — credenciales (email + bcrypt hash) usadas por NextAuth.
+- `templates`, `certificates` — plantillas y certificados generados por usuario.
+- `trabajadores`, `instructores`, `proveedores` — colaboradores.
+- `devengados`, `deducciones` — fijos por trabajador (FK a `trabajadores`).
+- `historial` — log de desprendibles generados/enviados.
+- `nomina_counters` (+ función `next_comprobante()`) — contador atómico para el número de comprobante.
+
+Storage buckets (privados): `templates`, `certificates`, `desprendibles`.
 
 ## Folder map
 
 ```
 src/
   app/
-    layout.tsx                  Root layout, wraps Providers (SessionProvider).
-    page.tsx                    Marketing landing.
-    (auth)/login/page.tsx       Sign-in form (client, signIn credentials).
-    (auth)/register/page.tsx    Register form (POST /api/register).
-    (dashboard)/dashboard/page.tsx     Authed home, signOut.
-    (dashboard)/templates/page.tsx     Upload UI for PDF/DOCX templates.
-    (dashboard)/certificates/page.tsx  Generation hint page.
-    api/auth/[...nextauth]/route.ts    NextAuth handlers.
-    api/register/route.ts              Create app_users row.
-    api/templates/route.ts             GET list / POST upload (multipart) / PATCH { id, fields[] } save placements.
-    api/templates/[id]/route.ts        GET single template (with fields, page_sizes).
-    api/templates/[id]/url/route.ts    GET signed URL (10 min) for the stored template file.
-    api/certificates/generate/route.ts POST { templateId, values } -> rendered file.
-    (dashboard)/templates/[id]/edit/page.tsx  Server page that renders TemplateEditor.
+    layout.tsx                  Layout raíz (tema oscuro Nominapp).
+    page.tsx                    Landing → redirige a /dashboard si hay sesión.
+    (auth)/login/page.tsx
+    (auth)/register/page.tsx
+    (dashboard)/
+      layout.tsx                Sidebar + Toaster, gating por proxy.ts.
+      dashboard/page.tsx        Home con stats y atajos.
+      desprendibles/page.tsx    Generador y envío de desprendibles.
+      colaboradores/
+        empleados/page.tsx
+        instructores/page.tsx
+        proveedores/page.tsx
+      historial/page.tsx
+      templates/page.tsx + [id]/edit
+      certificates/page.tsx
+    api/
+      auth/[...nextauth]/route.ts
+      register/route.ts
+      templates/...             (cert: subir/listar/editar campos)
+      certificates/generate/route.ts
+      nomina/
+        trabajadores/route.ts + [id]/route.ts
+        instructores/route.ts + [id]/route.ts
+        proveedores/route.ts + [id]/route.ts
+        devengados/route.ts + [id]/route.ts
+        deducciones/route.ts + [id]/route.ts
+        historial/route.ts
+        desprendible/route.ts   POST → genera PDF, sube a storage, inserta historial.
+        email/route.ts          POST → envía con Resend, actualiza historial.
   components/
-    providers.tsx               Client SessionProvider wrapper.
-    ui/                         Reusable presentational components (empty, add as needed).
-    forms/                      Form components (empty, add as needed).
+    layout/Sidebar.tsx          Sidebar Nominapp con grupos colapsables.
+    providers.tsx
+    ui/Modal.tsx
+    colaboradores/              PersonaPage<T>, PersonaForm, PersonaTable, ConceptosModal.
+    TemplateEditor.tsx          Editor de campos sobre PDF (react-pdf).
   lib/
-    auth/config.ts              NextAuth() instance: { handlers, auth, signIn, signOut }.
-    supabase/server.ts          Supabase SSR client (cookie-bound).
-    supabase/browser.ts         Supabase browser client.
-    supabase/admin.ts           Service-role client. SERVER ONLY.
-    cert/pdf.ts                 fillPdfByPlacements (overlay by coords), fillPdfForm (AcroForm fallback), pdfHasAcroForm, getPdfPageSizes.
-    cert/docx.ts                fillDocx (docxtemplater).
-    cert/index.ts               Re-exports + detectKind(filename) + PdfFieldDefStored type.
-  components/
-    TemplateEditor.tsx          Client editor: react-pdf preview + click-to-place fields. Saves via PATCH /api/templates.
-  proxy.ts                      Auth gate (Next 16 proxy convention). Redirects unauthed users on /dashboard|/templates|/certificates to /login.
-  types/next-auth.d.ts          Augments Session.user with `id`.
-supabase/migrations/0001_init.sql  Schema for app_users, templates, certificates.
-templates/                     Local sample bases (gitignore real client files).
-scripts/                       Ad-hoc admin scripts (empty).
+    auth/config.ts
+    supabase/{admin,server,browser}.ts
+    cert/{pdf,docx,index}.ts    Render de certificados (existing).
+    nomina/
+      auth.ts                   requireSession() helper para route handlers.
+      payment.ts                calculatePayment + formatCOP.
+      desprendible-pdf.ts       buildDesprendiblePdf — genera el PDF con pdf-lib.
+      comprobante.ts            nextComprobanteNumber() vía RPC.
+      email.ts                  sendDesprendibleEmail (Resend).
+  proxy.ts                      Auth gate: protege /dashboard, /desprendibles, /colaboradores, /historial, /templates, /certificates.
+  types/next-auth.d.ts
+supabase/migrations/
+  0001_init.sql                 app_users, templates, certificates.
+  0002_pdf_overlay.sql          page_sizes / has_acroform.
+  0003_nominapp.sql             Nómina (trabajadores, …, historial, counters).
+public/logo.webp
 ```
 
-## Auth flow
+## Flujos principales
 
+### 1. Auth
 1. `/register` → `POST /api/register` → bcrypt hash → insert `app_users`.
-2. `/login` → `signIn("credentials", { email, password })` → `lib/auth/config.ts:authorize` looks up `app_users`, compares hash, returns `{ id, email, name }`.
-3. JWT callback stores `uid`. Session callback exposes `session.user.id`.
-4. `src/proxy.ts` protects `/dashboard`, `/templates`, `/certificates`.
+2. `/login` → `signIn("credentials")` → `lib/auth/config.ts:authorize` lee `app_users`.
+3. JWT callback guarda `uid`. Session expone `session.user.id`.
+4. `src/proxy.ts` redirige a `/login` cualquier ruta protegida sin sesión.
 
-The server route handlers call `auth()` to read the session and `getSupabaseAdmin()` for DB/Storage.
+### 2. Desprendible
+1. UI (`/desprendibles`) recolecta tipo persona, persona, fechas, devengados, deducciones, anotaciones, archivo opcional.
+2. Para empleados, también carga devengados/deducciones fijas desde `/api/nomina/devengados|deducciones?trabajadorId=`.
+3. **Generar PDF**: `POST /api/nomina/desprendible`
+   - Llama `next_comprobante()` para obtener número correlativo.
+   - `buildDesprendiblePdf` crea el PDF (pdf-lib, layout landscape Letter con header rojo, dos columnas, totales, valor a pagar).
+   - Sube a `desprendibles/<tipo>/<comprobante>_<nombre>_<uuid>.pdf` y registra `historial` (estado `Generado`).
+   - Devuelve `{ pdfBase64, historialId, comprobante, storagePath }`.
+4. **Enviar correo**: el cliente luego llama `POST /api/nomina/email` con el PDF base64, adjunto opcional, HTML del correo y `historialId`. Resend envía y actualiza `historial` (`Enviado` o `Fallido`).
 
-## Certificate generation flow
+### 3. Certificados (templates → certificates)
+1. **Plantilla**: `/templates` → `POST /api/templates` (multipart). Detecta PDF/DOCX, extrae page sizes, flag AcroForm.
+2. **Editor PDF**: `/templates/[id]/edit` → click-to-place. `PATCH /api/templates` guarda `fields[]`.
+3. **Generación**: `POST /api/certificates/generate { templateId, values }`. Si hay placements, overlay con pdf-lib; si hay AcroForm, fallback a fill form; DOCX usa docxtemplater. Resultado va a bucket `certificates` y queda registro en tabla `certificates`.
 
-1. **Upload template** — `POST /api/templates` (multipart: `name`, `file`).
-   - `detectKind()` checks `.pdf` / `.docx`.
-   - File goes to Supabase Storage bucket `templates/<userId>/<uuid>-<name>`.
-   - For PDF: server reads page sizes (`getPdfPageSizes`) and stores them in `templates.page_sizes`; also flags `has_acroform`.
-   - DB row in `templates` with `kind`, `storage_path`, `fields = []` (filled later in step 2).
-2. **Position fields (PDF only, non-AcroForm path)** — open `/templates/<id>/edit`.
-   - The editor renders the PDF with `react-pdf` and lets the user click to drop a placement per `key`.
-   - Saved via `PATCH /api/templates` body `{ id, fields }`.
-   - `fields` shape: `[{ key, page, x, y, size, align }]`. Coordinates are PDF user-space points (origin **bottom-left**).
-3. **Generate** — `POST /api/certificates/generate` body `{ templateId, values }`.
-   - Validates ownership.
-   - Downloads template bytes from Storage.
-   - `pdf` →
-     - if `templates.fields` is non-empty → `fillPdfByPlacements` draws each `values[key]` at its stored (x, y, size, align).
-     - else if `has_acroform` → `fillPdfForm` (AcroForm fallback for Adobe-prepared PDFs).
-     - else → 400 ("PDF template has no field placements").
-   - `docx` → `fillDocx` (docxtemplater renders `{{key}}`).
-   - Uploads result to `certificates/<userId>/<uuid>.<ext>`.
-   - Inserts `certificates` row with input `values` for audit.
+## Variables de entorno
 
-### Template authoring rules
+`.env.example`:
 
-- **PDF (no AcroForm — the common case)**: upload the PDF as-is; then use the editor at `/templates/<id>/edit` to click each spot and assign a `key`. The same `key` is what you send in `values` when generating.
-- **PDF (with AcroForm — Adobe-prepared)**: detected automatically. If you skip placement editing, the generator falls back to filling AcroForm fields by name.
-- **DOCX (recommended for variable-heavy docs)**: use `{{key}}` tags inside the document. No editor needed. Loops/conditions follow docxtemplater syntax.
+| Var | Notas |
+|-----|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Pública |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Pública |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Server only** |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `RESEND_API_KEY` | Server only |
+| `RESEND_FROM` | Email remitente verificado en Resend |
 
-### Coordinates cheat sheet (PDF)
+## Setup Supabase (resumen)
 
-- pdf-lib origin: **bottom-left**, units = points (1 pt = 1/72 inch). A US Letter page is 612×792.
-- The editor converts CSS pixel clicks to points using `page_sizes` and the rendered preview width.
-- `align: "center"` and `"right"` shift `x` by the measured text width at draw time so the anchor point matches the click.
-
-## Environment variables
-
-See `.env.example`. Required at runtime:
-
-| Var | Where used | Notes |
-|-----|------------|-------|
-| `NEXT_PUBLIC_SUPABASE_URL` | client + server | Public |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client + server | Public anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | **server only** | Never ship to browser. Used by `lib/supabase/admin.ts` |
-| `AUTH_SECRET` | server | `openssl rand -base64 32`. Required by Auth.js v5 |
-
-Local: copy `.env.example` to `.env.local`. Vercel: set in Project Settings → Environment Variables.
-
-## Supabase setup
-
-1. Create a project at https://supabase.com.
-2. Apply schema: paste `supabase/migrations/0001_init.sql` then `0002_pdf_overlay.sql` into the SQL editor (or use `supabase db push` with the CLI).
-3. Create two **private** Storage buckets: `templates` and `certificates`.
-4. Copy URL + anon key + service-role key into `.env.local`.
-
-RLS is intentionally **off** on these tables because all access goes through the server using the service-role key. If you later add direct browser access via the anon key, enable RLS and write per-table policies keyed on `owner_id = auth.uid()` — and migrate auth to Supabase Auth so `auth.uid()` is populated.
+1. Crear proyecto, anotar URL + keys.
+2. SQL editor → correr en orden `0001_init.sql`, `0002_pdf_overlay.sql`, `0003_nominapp.sql`.
+3. Storage → crear buckets **privados**: `templates`, `certificates`, `desprendibles`.
+4. Verificar que aparezca la fila `('comprobante', 0)` en `nomina_counters` y la función `next_comprobante`.
 
 ## Scripts
 
 ```
 npm run dev     # next dev
 npm run build   # next build
-npm run start   # next start (after build)
+npm run start   # next start
 npm run lint    # eslint
 ```
 
-## Deploy on Vercel
+## Convenciones
 
-1. Push repo to GitHub.
-2. Import into Vercel; framework auto-detected as Next.js.
-3. Set env vars (all four above).
-4. Deploy. The middleware and route handlers run on the Vercel Node runtime by default — `pdf-lib` and `docxtemplater` need Node, not Edge. Don't add `export const runtime = "edge"` to the cert routes.
+- **Service-role solo en servidor**: `lib/supabase/admin.ts` — nunca importar desde código `'use client'`.
+- **Auth helper**: en route handlers, usar `requireSession()` de `lib/nomina/auth.ts` (devuelve `{ session, response }`).
+- **Tema**: variables CSS (`--color-background`, `--color-surface`, `--color-accent`) definidas en `globals.css`. UI 100% Tailwind.
+- **Moneda**: `formatCOP(value)` (es-CO COP, sin decimales).
+- **Pdf-lib**: layout en puntos PDF (origen inferior-izquierdo, 1pt = 1/72in). Letter landscape = 792×612.
+- **Vercel**: no agregar `export const runtime = "edge"` en rutas de nómina/cert. Necesitan Node.
 
-## Conventions
+## Extensibilidad
 
-- Server-only modules: anything under `lib/supabase/admin.ts` and `lib/auth/config.ts`. Don't import from client components.
-- Path alias `@/*` → `src/*`.
-- Route segments under `(auth)` and `(dashboard)` are layout groups — they don't appear in URLs.
-- Keep the service-role key server-side. Browser must use the anon key only.
-
-## Extension hooks (where to plug new features)
-
-- **Per-template generation form**: read `templates.fields[].key` and render one input per key, then POST to `/api/certificates/generate`. Currently the certificates page is a stub.
-- **Drag-to-reposition** in the editor: `TemplateEditor.tsx` keeps fields in state — wrap each marker in pointer events and update its `x/y` on drag.
-- **Snap-to-grid / alignment guides** in the editor: easy add since coords already round-trip through state.
-- **Font choice / color** per field: extend `PdfFieldDef` with `font` and `color`, embed via `pdf.embedFont` / `pdf.embedStandardFont` in `fillPdfByPlacements`.
-- **DOCX placeholder discovery**: parse with docxtemplater's `getFullText()` + a regex for `{{...}}` tags on upload, store keys in `templates.fields`.
-- **Bulk CSV → many certs**: add `/api/certificates/bulk` that loops rows.
-- **Switch to Supabase Auth**: replace `lib/auth/config.ts` Credentials with Supabase Auth; turn on RLS; `app_users` becomes `auth.users` + a `profiles` table.
+- **Multi-tenant nómina**: agregar `owner_id` a tablas de nómina + filtrado en cada query (hoy es single workspace).
+- **Más metadata por trabajador** (EPS, fondo de pensión, ARL): extender schema y `PersonaForm` field config.
+- **Numeración por año**: `next_comprobante` actualmente es global; cambiar a `(year, value)` con UPSERT si se requiere reinicio anual.
+- **Bulk**: endpoint que reciba CSV y dispare N desprendibles secuenciales.
+- **Switch a Supabase Auth**: reemplazar Credentials, mover `app_users` a `auth.users` + `profiles`, activar RLS por `auth.uid()`.
