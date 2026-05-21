@@ -92,6 +92,9 @@ export function AsistenciaTemplateEditor({
   const [pageIndex, setPageIndex] = useState(0);
   const [fields, setFields] = useState<AsistenciaField[]>(initialFields);
   const [logo, setLogo] = useState<LogoRect>(initialLogo);
+  const [livePageSizes, setLivePageSizes] = useState<
+    Record<number, { width: number; height: number }>
+  >({});
   const [mode, setMode] = useState<"text" | "logo">("text");
   const [draftKey, setDraftKey] = useState<FieldKey>("nombre");
   const [draftSize, setDraftSize] = useState("24");
@@ -105,7 +108,7 @@ export function AsistenciaTemplateEditor({
   const [containerWidth, setContainerWidth] = useState(RENDER_WIDTH);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const page = pageSizes[pageIndex];
+  const page = livePageSizes[pageIndex] ?? pageSizes[pageIndex];
   const scale = page ? containerWidth / page.width : 1;
   const renderHeight = page ? page.height * scale : 0;
 
@@ -280,6 +283,14 @@ export function AsistenciaTemplateEditor({
               width={containerWidth}
               renderTextLayer={false}
               renderAnnotationLayer={false}
+              onLoadSuccess={(pageProxy) => {
+                const vp = pageProxy.getViewport({ scale: 1 });
+                setLivePageSizes((prev) => {
+                  const cur = prev[pageIndex];
+                  if (cur && cur.width === vp.width && cur.height === vp.height) return prev;
+                  return { ...prev, [pageIndex]: { width: vp.width, height: vp.height } };
+                });
+              }}
             />
           </Document>
 
@@ -300,7 +311,7 @@ export function AsistenciaTemplateEditor({
               if (f.align === "center") boxLeft = anchorX - widthPx / 2;
               else if (f.align === "right") boxLeft = anchorX - widthPx;
 
-              const capH = fontPx * 0.72;
+              const ascH = fontPx * 0.78;
               const descentH = fontPx * 0.22;
 
               return (
@@ -315,9 +326,9 @@ export function AsistenciaTemplateEditor({
                     className="absolute z-10 border border-dashed border-[var(--color-accent)]/50 bg-[var(--color-accent)]/5"
                     style={{
                       left: boxLeft,
-                      top: anchorY - capH,
+                      top: anchorY - ascH,
                       width: widthPx,
-                      height: capH + descentH,
+                      height: ascH + descentH,
                       overflow: "visible",
                     }}
                   >
@@ -346,7 +357,7 @@ export function AsistenciaTemplateEditor({
                   {/* Chip above box */}
                   <div
                     className="absolute z-30 -translate-y-full whitespace-nowrap rounded bg-[var(--color-accent)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow"
-                    style={{ left: boxLeft, top: anchorY - capH }}
+                    style={{ left: boxLeft, top: anchorY - ascH }}
                   >
                     {KEY_LABEL[f.key]} · {fSize}pt
                   </div>

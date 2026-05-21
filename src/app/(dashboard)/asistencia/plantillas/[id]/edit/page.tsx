@@ -70,6 +70,9 @@ export default async function EditAsistenciaPage({
           templateId={data.id}
           pdfFieldNames={acroformFields}
           initialMap={acroformMap}
+          pdfUrl={signed.data.signedUrl}
+          pageSizes={pageSizes}
+          initialLogo={(data.logo_position ?? null) as LogoRect}
         />
       ) : (
         <AsistenciaTemplateEditor

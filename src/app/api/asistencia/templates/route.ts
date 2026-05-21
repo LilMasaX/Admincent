@@ -12,8 +12,14 @@ const FIELD_KEYS = [
   "horas",
   "instructor",
   "dia",
+  "dia_inicio",
+  "dia_fin",
   "mes",
   "anio",
+  "dia_expedicion",
+  "mes_expedicion",
+  "anio_expedicion",
+  "adicional",
 ] as const;
 type FieldKey = (typeof FIELD_KEYS)[number];
 
@@ -33,8 +39,9 @@ async function detectAcroformTextFields(bytes: Uint8Array): Promise<string[]> {
 function autoMap(fields: string[]): Array<{ pdfField: string; key: FieldKey }> {
   const out: Array<{ pdfField: string; key: FieldKey }> = [];
   for (const name of fields) {
-    const norm = name.trim().toLowerCase();
-    const match = FIELD_KEYS.find((k) => k === norm || k === norm.replace(/[^a-z]/g, ""));
+    const norm = name.trim().toLowerCase().replace(/\s+/g, "_");
+    const stripped = norm.replace(/[^a-z_]/g, "");
+    const match = FIELD_KEYS.find((k) => k === norm || k === stripped);
     if (match) out.push({ pdfField: name, key: match });
   }
   return out;

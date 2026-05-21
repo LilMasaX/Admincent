@@ -8,6 +8,7 @@ type Template = {
   id: string;
   name: string;
   fields: { key: string; monthFormat?: "numeric" | "text" }[];
+  acroform_field_map: { key: string; monthFormat?: "numeric" | "text" }[] | null;
   logo_position: { width: number; height: number } | null;
 };
 
@@ -23,6 +24,10 @@ export default function AsistenciaGeneratorPage() {
   const [instructor, setInstructor] = useState("");
   const [horas, setHoras] = useState("");
   const [fecha, setFecha] = useState("");
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaFin, setFechaFin] = useState("");
+  const [fechaExpedicion, setFechaExpedicion] = useState("");
+  const [adicional, setAdicional] = useState("");
   const [mode, setMode] = useState<Mode>("individual");
   const [single, setSingle] = useState<Participante>({ nombre: "" });
   const [bulk, setBulk] = useState<Participante[]>([]);
@@ -42,10 +47,11 @@ export default function AsistenciaGeneratorPage() {
     [templates, templateId],
   );
 
-  const templateKeys = useMemo(
-    () => new Set(template?.fields.map((f) => f.key) ?? []),
-    [template],
-  );
+  const templateKeys = useMemo(() => {
+    const fromFields = template?.fields.map((f) => f.key) ?? [];
+    const fromAcro = template?.acroform_field_map?.map((f) => f.key) ?? [];
+    return new Set([...fromFields, ...fromAcro]);
+  }, [template]);
   const templateReady = useMemo(
     () => templateKeys.has("nombre") && templateKeys.has("curso"),
     [templateKeys],
@@ -54,6 +60,14 @@ export default function AsistenciaGeneratorPage() {
   const usesHoras = templateKeys.has("horas");
   const usesFecha =
     templateKeys.has("dia") || templateKeys.has("mes") || templateKeys.has("anio");
+  const usesDiaInicio = templateKeys.has("dia_inicio");
+  const usesDiaFin = templateKeys.has("dia_fin");
+  const usesFechaRange = usesDiaInicio || usesDiaFin;
+  const usesDiaExpedicion = templateKeys.has("dia_expedicion");
+  const usesMesExpedicion = templateKeys.has("mes_expedicion");
+  const usesAnioExpedicion = templateKeys.has("anio_expedicion");
+  const usesFechaExpedicion = usesDiaExpedicion || usesMesExpedicion || usesAnioExpedicion;
+  const usesAdicional = templateKeys.has("adicional");
 
   function handleCsvText(t: string) {
     setCsvText(t);
@@ -147,6 +161,49 @@ export default function AsistenciaGeneratorPage() {
       return;
     }
 
+    let dia_inicio: number | undefined;
+    let dia_fin: number | undefined;
+    if (usesFechaRange) {
+      if (fechaInicio) {
+        const [y, m, d] = fechaInicio.split("-").map(Number);
+        if (y && m && d) {
+          dia_inicio = d;
+          if (!mes) mes = m;
+          if (!anio) anio = y;
+        }
+      }
+      if (fechaFin) {
+        const [, , d] = fechaFin.split("-").map(Number);
+        if (d) dia_fin = d;
+      }
+      if (usesDiaInicio && !dia_inicio) {
+        toast.error("Selecciona la fecha de inicio");
+        return;
+      }
+      if (usesDiaFin && !dia_fin) {
+        toast.error("Selecciona la fecha de fin");
+        return;
+      }
+    }
+
+    let dia_expedicion: number | undefined;
+    let mes_expedicion: number | undefined;
+    let anio_expedicion: number | undefined;
+    if (usesFechaExpedicion) {
+      if (!fechaExpedicion) {
+        toast.error("Selecciona la fecha de expedición");
+        return;
+      }
+      const [y, m, d] = fechaExpedicion.split("-").map(Number);
+      if (!y || !m || !d) {
+        toast.error("Fecha de expedición inválida");
+        return;
+      }
+      dia_expedicion = d;
+      mes_expedicion = m;
+      anio_expedicion = y;
+    }
+
     setBusy(true);
     const id = toast.loading(`Generando ${participantes.length} certificado(s)…`);
     try {
@@ -159,8 +216,14 @@ export default function AsistenciaGeneratorPage() {
           instructor: usesInstructor && instructor.trim() ? instructor.trim() : undefined,
           horas: usesHoras && horas.trim() ? horas.trim() : undefined,
           dia,
+          dia_inicio,
+          dia_fin,
           mes,
           anio,
+          dia_expedicion,
+          mes_expedicion,
+          anio_expedicion,
+          adicional: usesAdicional && adicional.trim() ? adicional.trim() : undefined,
           participantes,
           logoBase64,
           logoMime,
@@ -244,6 +307,46 @@ export default function AsistenciaGeneratorPage() {
                   type="date"
                   value={fecha}
                   onChange={(e) => setFecha(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+            {usesDiaInicio && (
+              <Field label="Fecha inicio">
+                <input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={(e) => setFechaInicio(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+            {usesDiaFin && (
+              <Field label="Fecha fin">
+                <input
+                  type="date"
+                  value={fechaFin}
+                  onChange={(e) => setFechaFin(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+            {usesFechaExpedicion && (
+              <Field label="Fecha de expedición">
+                <input
+                  type="date"
+                  value={fechaExpedicion}
+                  onChange={(e) => setFechaExpedicion(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+            {usesAdicional && (
+              <Field label="Adicional">
+                <input
+                  value={adicional}
+                  onChange={(e) => setAdicional(e.target.value)}
+                  placeholder="Texto adicional"
                   className={inputCls}
                 />
               </Field>

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Award, Upload } from "lucide-react";
+import { Award, Trash2, Upload } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 type Template = {
@@ -23,6 +23,7 @@ export default function AsistenciaPlantillasPage() {
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function loadTemplates() {
@@ -63,6 +64,23 @@ export default function AsistenciaPlantillasPage() {
     }
   }
 
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`¿Eliminar plantilla "${name}"? Esta acción no se puede deshacer.`)) return;
+    setDeleting(id);
+    const tid = toast.loading("Eliminando…");
+    try {
+      const res = await fetch(`/api/asistencia/templates/${id}`, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? "Error eliminando");
+      toast.success("Plantilla eliminada", { id: tid });
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error", { id: tid });
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   const inputCls =
     "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none";
 
@@ -72,14 +90,8 @@ export default function AsistenciaPlantillasPage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Plantillas de asistencia</h1>
           <p className="text-sm text-[var(--color-muted)]">
-            Sube un PDF tipo diploma horizontal. Coloca los campos{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">nombre</code>,{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">cedula</code>,{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">curso</code> y opcionales{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">instructor</code>,{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">dia</code>{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">mes</code>{" "}
-            <code className="rounded bg-[var(--color-surface-2)] px-1">año</code>.
+            Sube un PDF de diploma con campos de formulario (AcroForm). La app
+            rellena cada campo por nombre y solo usa coordenadas para el logo.
           </p>
         </div>
         <Link
@@ -89,6 +101,90 @@ export default function AsistenciaPlantillasPage() {
           Ir al generador →
         </Link>
       </header>
+
+      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+        <h2 className="mb-3 text-lg font-semibold">
+          Cómo añadir los campos con PDF24 Tools (gratis)
+        </h2>
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--color-muted)]">
+          <li>
+            Descarga{" "}
+            <a
+              href="https://tools.pdf24.org/es/creator"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--color-accent)] underline"
+            >
+              PDF24 Creator
+            </a>{" "}
+            (Windows, gratis) e instálalo. También sirve la herramienta web{" "}
+            <a
+              href="https://tools.pdf24.org/es/edit-pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--color-accent)] underline"
+            >
+              Editar PDF
+            </a>
+            .
+          </li>
+          <li>Abre tu PDF de diploma en PDF24 Creator.</li>
+          <li>
+            En la barra de herramientas activa <strong>Formulario</strong> →{" "}
+            <strong>Insertar campo de texto</strong>.
+          </li>
+          <li>
+            Dibuja un campo de texto sobre cada zona del diploma donde irá un dato.
+          </li>
+          <li>
+            Clic derecho en cada campo → <strong>Propiedades</strong> → pestaña{" "}
+            <strong>General</strong> → <strong>Nombre</strong>. Usa exactamente uno
+            de estos nombres (en minúsculas):
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[
+                "nombre",
+                "cedula",
+                "curso",
+                "horas",
+                "instructor",
+                "dia",
+                "dia_inicio",
+                "dia_fin",
+                "mes",
+                "anio",
+                "dia_expedicion",
+                "mes_expedicion",
+                "anio_expedicion",
+                "adicional",
+              ].map((k) => (
+                <code
+                  key={k}
+                  className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-xs text-[var(--color-text)]"
+                >
+                  {k}
+                </code>
+              ))}
+            </div>
+          </li>
+          <li>
+            Ajusta tamaño de letra y alineación dentro de las{" "}
+            <strong>Propiedades</strong> del campo (pestaña <strong>Apariencia</strong>).
+          </li>
+          <li>Guarda como PDF y súbelo aquí abajo.</li>
+          <li>
+            En el editor podrás revisar el mapeo automático y arrastrar el área del
+            logo extra (opcional).
+          </li>
+        </ol>
+        <p className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-xs text-[var(--color-muted)]">
+          Tip: para fechas tipo &quot;del 19 al 25 de 12 del 2026&quot; usa los
+          campos{" "}
+          <code className="rounded bg-[var(--color-surface)] px-1">dia_inicio</code>,{" "}
+          <code className="rounded bg-[var(--color-surface)] px-1">dia_fin</code>,{" "}
+          <code className="rounded bg-[var(--color-surface)] px-1">mes</code>,{" "}
+          <code className="rounded bg-[var(--color-surface)] px-1">anio</code>.
+        </p>
+      </section>
 
       <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
         <h2 className="mb-4 text-lg font-semibold">Subir nueva plantilla</h2>
@@ -167,12 +263,23 @@ export default function AsistenciaPlantillasPage() {
                       </p>
                     </div>
                   </div>
-                  <Link
-                    href={`/asistencia/plantillas/${t.id}/edit`}
-                    className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs transition hover:bg-[var(--color-surface-2)]"
-                  >
-                    Editar
-                  </Link>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Link
+                      href={`/asistencia/plantillas/${t.id}/edit`}
+                      className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs transition hover:bg-[var(--color-surface-2)]"
+                    >
+                      Editar
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(t.id, t.name)}
+                      disabled={deleting === t.id}
+                      className="rounded-lg border border-[var(--color-border)] p-2 text-[var(--color-muted)] transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                      title="Eliminar plantilla"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </li>
               );
             })}

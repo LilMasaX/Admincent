@@ -10,8 +10,14 @@ export type FieldKey =
   | "horas"
   | "instructor"
   | "dia"
+  | "dia_inicio"
+  | "dia_fin"
   | "mes"
-  | "anio";
+  | "anio"
+  | "dia_expedicion"
+  | "mes_expedicion"
+  | "anio_expedicion"
+  | "adicional";
 
 export type AsistenciaFieldDef = {
   key: FieldKey;
@@ -61,8 +67,14 @@ export type AsistenciaValues = {
   horas?: string;
   instructor?: string;
   dia?: number;
+  dia_inicio?: number;
+  dia_fin?: number;
   mes?: number;
   anio?: number;
+  dia_expedicion?: number;
+  mes_expedicion?: number;
+  anio_expedicion?: number;
+  adicional?: string;
 };
 
 function valueForKey(
@@ -83,12 +95,26 @@ function valueForKey(
       return v.instructor ?? "";
     case "dia":
       return v.dia != null ? String(v.dia).padStart(2, "0") : "";
+    case "dia_inicio":
+      return v.dia_inicio != null ? String(v.dia_inicio).padStart(2, "0") : "";
+    case "dia_fin":
+      return v.dia_fin != null ? String(v.dia_fin).padStart(2, "0") : "";
     case "mes":
       if (v.mes == null) return "";
       if (monthFormat === "text") return MESES_ES[v.mes - 1] ?? "";
       return String(v.mes).padStart(2, "0");
     case "anio":
       return v.anio != null ? String(v.anio) : "";
+    case "dia_expedicion":
+      return v.dia_expedicion != null ? String(v.dia_expedicion).padStart(2, "0") : "";
+    case "mes_expedicion":
+      if (v.mes_expedicion == null) return "";
+      if (monthFormat === "text") return MESES_ES[v.mes_expedicion - 1] ?? "";
+      return String(v.mes_expedicion).padStart(2, "0");
+    case "anio_expedicion":
+      return v.anio_expedicion != null ? String(v.anio_expedicion) : "";
+    case "adicional":
+      return v.adicional ?? "";
   }
 }
 
@@ -132,14 +158,15 @@ async function drawLogoOverlay(
     logoMime === "image/png"
       ? await pdf.embedPng(logoBytes)
       : await pdf.embedJpg(logoBytes);
+  const crop = page.getCropBox();
   const { x, y, width, height } = logoPosition;
   const ratio = img.width / img.height;
   let drawW = width;
   let drawH = height;
   if (drawW / drawH > ratio) drawW = drawH * ratio;
   else drawH = drawW / ratio;
-  const cx = x + (width - drawW) / 2;
-  const cy = y + (height - drawH) / 2;
+  const cx = x + (width - drawW) / 2 + crop.x;
+  const cy = y + (height - drawH) / 2 + crop.y;
   page.drawImage(img, { x: cx, y: cy, width: drawW, height: drawH });
 }
 
@@ -200,7 +227,14 @@ async function renderAsistenciaPdfOverlay(opts: {
       else if (f.align === "right") x = f.x - w;
     }
 
-    page.drawText(text, { x, y: f.y, size, font, color: rgb(0, 0, 0) });
+    const crop = page.getCropBox();
+    page.drawText(text, {
+      x: x + crop.x,
+      y: f.y + crop.y,
+      size,
+      font,
+      color: rgb(0, 0, 0),
+    });
   }
 
   if (opts.logoPosition && opts.logoBytes && opts.logoMime) {
